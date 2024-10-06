@@ -36,13 +36,6 @@ final class GenericContainer implements Container
     ) {
     }
 
-    public function setDefinitions(array $definitions): self
-    {
-        $this->definitions = new ArrayIterator($definitions);
-
-        return $this;
-    }
-
     public function setInitializers(array $initializers): self
     {
         $this->initializers = new ArrayIterator($initializers);
@@ -55,11 +48,6 @@ final class GenericContainer implements Container
         $this->dynamicInitializers = new ArrayIterator($dynamicInitializers);
 
         return $this;
-    }
-
-    public function getDefinitions(): array
-    {
-        return $this->definitions->getArrayCopy();
     }
 
     public function getInitializers(): array

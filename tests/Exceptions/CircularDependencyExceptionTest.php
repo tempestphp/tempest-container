@@ -12,6 +12,7 @@ use Tempest\Container\Tests\Fixtures\CircularZ;
 
 /**
  * @internal
+ * @small
  */
 final class CircularDependencyExceptionTest extends TestCase
 {
