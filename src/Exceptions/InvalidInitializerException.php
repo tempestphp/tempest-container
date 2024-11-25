@@ -8,15 +8,8 @@ use Exception;
 
 final class InvalidInitializerException extends Exception
 {
-    public static function dynamicInitializerNotAllowed(string $initializerClassName): self
+    public function __construct(string $initializerClassName)
     {
-        return new self(
-            "Dynamic initializers are not allowed for native values, {$initializerClassName} is a dynamic initializer."
-        );
-    }
-
-    public function __construct(string $message)
-    {
-        parent::__construct($message);
+        parent::__construct("Initializers must be implement Initializer, {$initializerClassName} does not.");
     }
 }

@@ -11,6 +11,7 @@ use Tempest\Container\Tests\Fixtures\AutowireA;
 
 /**
  * @internal
+ * @small
  */
 final class CannotAutowireExceptionTest extends TestCase
 {
@@ -33,7 +34,7 @@ final class CannotAutowireExceptionTest extends TestCase
 TXT;
 
             $this->assertStringContainsStringIgnoringLineEndings($expected, $cannotAutowireException->getMessage());
-            $this->assertStringContainsString("CannotAutowireExceptionTest.php:24", $cannotAutowireException->getMessage());
+            $this->assertStringContainsString("CannotAutowireExceptionTest.php:25", $cannotAutowireException->getMessage());
 
             throw $cannotAutowireException;
         }

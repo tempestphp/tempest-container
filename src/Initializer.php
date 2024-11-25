@@ -6,5 +6,5 @@ namespace Tempest\Container;
 
 interface Initializer
 {
-    public function initialize(Container $container): mixed;
+    public function initialize(Container $container): object;
 }
