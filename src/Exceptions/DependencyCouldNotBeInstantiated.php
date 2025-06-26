@@ -8,7 +8,7 @@ use Exception;
 use Tempest\Container\DependencyChain;
 use Tempest\Reflection\ClassReflector;
 
-final class CannotInstantiateDependencyException extends Exception implements ContainerException
+final class DependencyCouldNotBeInstantiated extends Exception implements ContainerException
 {
     public function __construct(ClassReflector $class, DependencyChain $chain)
     {

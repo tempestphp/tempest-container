@@ -8,15 +8,20 @@ use Exception;
 use Tempest\Container\Dependency;
 use Tempest\Container\DependencyChain;
 
-final class CannotAutowireException extends Exception implements ContainerException
+final class TaggedDependencyCouldNotBeResolved extends Exception implements ContainerException
 {
-    public function __construct(DependencyChain $chain, Dependency $brokenDependency)
+    public function __construct(DependencyChain $chain, Dependency $brokenDependency, string $tag)
     {
         $stack = $chain->all();
+        $stack[] = $brokenDependency;
 
-        $firstDependency = $chain->first();
+        $message = PHP_EOL . PHP_EOL . "Could not resolve tagged dependency {$brokenDependency->getName()}#{$tag}, did you forget to define an initializer for it?" . PHP_EOL;
 
-        $message = PHP_EOL . PHP_EOL . "Cannot autowire {$firstDependency->getName()} because {$brokenDependency->getName()} cannot be resolved" . PHP_EOL;
+        if (count($stack) < 2) {
+            parent::__construct($message);
+
+            return;
+        }
 
         $i = 0;
 
