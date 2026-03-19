@@ -22,6 +22,8 @@ use Tempest\Reflection\TypeReflector;
 use Throwable;
 use UnitEnum;
 
+use const ARRAY_FILTER_USE_BOTH;
+
 final class GenericContainer implements Container
 {
     use HasInstance;
@@ -30,8 +32,11 @@ final class GenericContainer implements Container
         /** @var ArrayIterator<array-key, mixed> $definitions */
         private(set) ArrayIterator $definitions = new ArrayIterator(),
 
-        /** @var ArrayIterator<array-key, mixed> $singletons */
-        private(set) ArrayIterator $singletons = new ArrayIterator(),
+        /** @var ArrayIterator<array-key, mixed> $singletonDefinitions */
+        private(set) ArrayIterator $singletonDefinitions = new ArrayIterator(),
+
+        /** @var ArrayIterator<array-key, object> $resolvedSingletons */
+        private(set) ArrayIterator $resolvedSingletons = new ArrayIterator(),
 
         /** @var ArrayIterator<array-key, class-string> $initializers */
         private(set) ArrayIterator $initializers = new ArrayIterator(),
@@ -41,6 +46,10 @@ final class GenericContainer implements Container
 
         /** @var ArrayIterator<array-key, class-string[]> $decorators */
         private(set) ArrayIterator $decorators = new ArrayIterator(),
+
+        /** @var ArrayIterator<array-key, class-string<\Tempest\Container\Resettable>> $resettables */
+        private(set) ArrayIterator $resettables = new ArrayIterator(),
+
         private(set) ?DependencyChain $chain = null,
     ) {
         $this->singleton(Container::class, $this);
@@ -57,7 +66,7 @@ final class GenericContainer implements Container
 
     public function setSingletons(array $singletons): self
     {
-        $this->singletons = new ArrayIterator($singletons);
+        $this->singletonDefinitions = new ArrayIterator($singletons);
 
         return $this;
     }
@@ -93,7 +102,7 @@ final class GenericContainer implements Container
      */
     public function getSingletons(?string $interface = null): array
     {
-        $singletons = $this->singletons->getArrayCopy();
+        $singletons = $this->singletonDefinitions->getArrayCopy();
 
         if (is_null($interface)) {
             return $singletons;
@@ -102,7 +111,7 @@ final class GenericContainer implements Container
         return array_filter(
             array: $singletons,
             callback: static fn (mixed $_, string $key) => str_starts_with($key, "{$interface}#") || $key === $interface,
-            mode: \ARRAY_FILTER_USE_BOTH,
+            mode: ARRAY_FILTER_USE_BOTH,
         );
     }
 
@@ -130,16 +139,26 @@ final class GenericContainer implements Container
 
     public function unregister(string $className, bool $tagged = false): self
     {
-        unset($this->definitions[$className], $this->singletons[$className]);
+        unset($this->definitions[$className]);
+        unset($this->singletonDefinitions[$className]);
+        unset($this->resolvedSingletons[$className]);
 
         if ($tagged) {
-            $singletons = array_filter(
-                array: $this->getSingletons(),
-                callback: static fn (mixed $_, string $key) => ! str_starts_with($key, "{$className}#"),
-                mode: \ARRAY_FILTER_USE_BOTH,
-            );
+            foreach ($this->singletonDefinitions as $key => $definition) {
+                if (! str_starts_with($key, "{$className}#")) {
+                    continue;
+                }
 
-            $this->setSingletons($singletons);
+                unset($this->singletonDefinitions[$key]);
+            }
+
+            foreach ($this->resolvedSingletons as $key => $definition) {
+                if (! str_starts_with($key, "{$className}#")) {
+                    continue;
+                }
+
+                unset($this->resolvedSingletons[$key]);
+            }
         }
 
         return $this;
@@ -147,7 +166,7 @@ final class GenericContainer implements Container
 
     public function has(string $className, null|string|UnitEnum $tag = null): bool
     {
-        return isset($this->definitions[$className]) || isset($this->singletons[$this->resolveTaggedName($className, $tag)]);
+        return isset($this->definitions[$className]) || isset($this->singletonDefinitions[$this->resolveTaggedName($className, $tag)]);
     }
 
     public function singleton(string $className, mixed $definition, null|string|UnitEnum $tag = null): self
@@ -156,9 +175,10 @@ final class GenericContainer implements Container
             $tag = $definition->tag;
         }
 
-        $className = $this->resolveTaggedName($className, $tag);
+        $dependencyName = $this->resolveTaggedName($className, $tag);
 
-        $this->singletons[$className] = $definition;
+        $this->singletonDefinitions[$dependencyName] = $definition;
+        unset($this->resolvedSingletons[$dependencyName]);
 
         return $this;
     }
@@ -346,12 +366,18 @@ final class GenericContainer implements Container
 
         $dependencyName = $this->resolveTaggedName($className, $tag);
 
+        // Check if a resolved singleton is present
+        if ($instance = $this->resolvedSingletons[$dependencyName] ?? null) {
+            $this->resolveChain()->add($class);
+
+            return $instance;
+        }
+
         // Check if the class has been registered as a singleton.
-        if ($instance = $this->singletons[$dependencyName] ?? null) {
-            if ($instance instanceof Closure) {
-                $instance = $instance($this);
-                $this->singletons[$className] = $instance;
-            }
+        if ($singletonDefinition = $this->singletonDefinitions[$dependencyName] ?? null) {
+            $instance = $singletonDefinition instanceof Closure ? $singletonDefinition($this) : $singletonDefinition;
+
+            $this->resolvedSingletons[$dependencyName] = $instance;
 
             $this->resolveChain()->add($class);
 
@@ -677,5 +703,42 @@ final class GenericContainer implements Container
         }
 
         return $instance;
+    }
+
+    public function addResettable(string|ClassReflector $resettableClass): Container
+    {
+        if ($resettableClass instanceof ClassReflector) {
+            $resettableClass = $resettableClass->getName();
+        }
+
+        $this->resettables[$resettableClass] = $resettableClass;
+
+        return $this;
+    }
+
+    public function reset(): self
+    {
+        $this->resolvedSingletons = new ArrayIterator();
+
+        foreach ($this->resettables as $resettableClass) {
+            /** @var Resettable $resettable */
+            $resettable = $this->get($resettableClass);
+
+            $resettable->reset();
+        }
+
+        return $this;
+    }
+
+    public function getResettables(): array
+    {
+        return $this->resettables->getArrayCopy();
+    }
+
+    public function setResettables(array $resettables): self
+    {
+        $this->resettables = new ArrayIterator($resettables);
+
+        return $this;
     }
 }

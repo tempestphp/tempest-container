@@ -53,6 +53,7 @@ use Tempest\Container\Tests\Fixtures\InvokableClass;
 use Tempest\Container\Tests\Fixtures\InvokableClassWithDependencies;
 use Tempest\Container\Tests\Fixtures\InvokableClassWithParameters;
 use Tempest\Container\Tests\Fixtures\OptionalTypesClass;
+use Tempest\Container\Tests\Fixtures\ResettableDependency;
 use Tempest\Container\Tests\Fixtures\SingletonClass;
 use Tempest\Container\Tests\Fixtures\SingletonInitializer;
 use Tempest\Container\Tests\Fixtures\SlowDependency;
@@ -73,6 +74,12 @@ use function Tempest\Reflection\reflect;
  */
 final class ContainerTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        SingletonClass::$count = 0;
+    }
+
     public function test_get_with_autowire(): void
     {
         $container = new GenericContainer();
@@ -689,5 +696,25 @@ final class ContainerTest extends TestCase
         $instance = $container->get(DecoratedInterface::class);
 
         $this->assertInstanceOf(DecoratorWithoutConstructor::class, $instance);
+    }
+
+    public function test_reset(): void
+    {
+        ResettableDependency::$reset = false;
+
+        $container = new GenericContainer();
+
+        $container->addResettable(ResettableDependency::class);
+        $container->singleton(SingletonClass::class, fn () => new SingletonClass());
+        $container->get(SingletonClass::class);
+        $container->get(SingletonClass::class);
+        $this->assertSame(1, SingletonClass::$count);
+
+        $container->reset();
+
+        $container->get(SingletonClass::class);
+        $container->get(SingletonClass::class);
+        $this->assertSame(2, SingletonClass::$count); // constructed twice, once before and once after reset
+        $this->assertTrue(ResettableDependency::$reset);
     }
 }
